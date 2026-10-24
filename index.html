@@ -66,6 +66,8 @@ button.danger:hover{background:var(--danger-bg)}
 button.ghost{border-color:transparent;background:transparent}
 button.ghost:hover{background:var(--surface-2)}
 button:disabled{opacity:.45;cursor:default}
+.header button.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.header button:not(.ghost):not(:disabled):hover{background:var(--accent);border-color:var(--accent);color:#fff}
 input[type=text],input[type=number],select,textarea{
   font-family:inherit;font-size:13px;color:var(--text);background:var(--surface);
   border:1px solid var(--border-strong);border-radius:var(--radius);padding:6px 8px;width:100%;
@@ -197,14 +199,14 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
     <h1><i class="ti ti-file-text" aria-hidden="true" style="vertical-align:-3px;margin-right:6px"></i>Rule editor</h1>
     <span class="meta" id="fileMeta">Chưa nạp file</span>
     <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
-    <button id="btnImport"><i class="ti ti-upload" aria-hidden="true"></i> Nhập JSON</button>
-    <button id="btnGithub" title="Nhập rules.json trực tiếp từ repo GitHub (hỗ trợ repo private bằng token)"><i class="ti ti-brand-github" aria-hidden="true"></i> Nhập từ GitHub</button>
     <input type="file" id="mergeInput" accept=".json,application/json" style="display:none">
-    <button id="btnMerge" disabled title="Gộp rule từ file JSON của đồng nghiệp vào file đang mở (không ghi đè toàn bộ)"><i class="ti ti-git-merge" aria-hidden="true"></i> Gộp JSON</button>
-    <button id="btnSave" class="primary" disabled title="Lưu thẳng vào file đang mở (Ctrl+S)"><i class="ti ti-device-floppy" aria-hidden="true"></i> Lưu</button>
-    <button id="btnSaveAs" disabled title="Chọn file trên máy để lưu"><i class="ti ti-file-export" aria-hidden="true"></i> Lưu thành…</button>
-    <button id="btnPush" disabled title="Chỉ dùng được khi file được nhập từ GitHub: commit thẳng thay đổi lên repo"><i class="ti ti-cloud-upload" aria-hidden="true"></i> Đẩy lên GitHub</button>
-    <button id="btnDraft" disabled title="Chọn file lưu tạm; sau đó tự lưu mỗi khi có thay đổi"><i class="ti ti-clock-down" aria-hidden="true"></i> Lưu tạm: tắt</button>
+    <button id="btnGithub" title="Nhập rules.json trực tiếp từ repo GitHub (hỗ trợ repo private bằng token)"><i class="ti ti-brand-github" aria-hidden="true"></i> Github Import</button>
+    <button id="btnImport" title="Chọn file JSON trên máy để chỉnh sửa"><i class="ti ti-upload" aria-hidden="true"></i> Local Import</button>
+    <button id="btnPush" disabled title="Chỉ dùng được khi file được nhập từ GitHub: commit thẳng thay đổi lên repo"><i class="ti ti-cloud-upload" aria-hidden="true"></i> Github Export</button>
+    <button id="btnSave" disabled title="Lưu thẳng vào file đang mở (Ctrl+S)"><i class="ti ti-device-floppy" aria-hidden="true"></i> Save Local</button>
+    <button id="btnSaveAs" disabled title="Chọn file trên máy để lưu"><i class="ti ti-file-export" aria-hidden="true"></i> Save as</button>
+    <button id="btnDraft" disabled title="Chọn file lưu tạm; sau đó tự lưu mỗi khi có thay đổi"><i class="ti ti-clock-down" aria-hidden="true"></i> Auto Save</button>
+    <button id="btnMerge" disabled title="Gộp rule từ file JSON của đồng nghiệp vào file đang mở (không ghi đè toàn bộ)"><i class="ti ti-git-merge" aria-hidden="true"></i> Merge</button>
     <span style="width:1px;height:20px;background:var(--border-strong);margin:0 2px"></span>
     <button id="btnUndo" class="ghost" title="Hoàn tác (Ctrl+Z)" disabled><i class="ti ti-arrow-back-up" aria-hidden="true"></i></button>
     <button id="btnRedo" class="ghost" title="Làm lại (Ctrl+Y)" disabled><i class="ti ti-arrow-forward-up" aria-hidden="true"></i></button>
@@ -563,7 +565,7 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
     $("btnImport").disabled = !!state.data;
     $("btnGithub").disabled = !!state.data;
     $("btnPush").disabled = !(state.data && ghSource && ghSource.sha);
-    $("btnImport").title = state.data ? "Đã nhập file. Dùng Gộp JSON để thêm rule từ file khác." : "Chọn file JSON để chỉnh sửa; nút Lưu sẽ ghi thẳng vào file này";
+    $("btnImport").title = state.data ? "Đã nhập file. Dùng Merge để thêm rule từ file khác." : "Chọn file JSON để chỉnh sửa; nút Lưu sẽ ghi thẳng vào file này";
     $("btnSave").disabled = !state.data;
     $("btnSaveAs").disabled = !state.data;
     $("btnDraft").disabled = !state.data;
@@ -2080,8 +2082,9 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
   // ---- Lưu tạm ----
   function setDraftLabel(){
     var where = draftHandle ? draftHandle.name : "trình duyệt";
-    $("btnDraft").innerHTML = '<i class="ti ti-clock-down" aria-hidden="true"></i> Lưu tạm: ' + (draftOn ? "bật (" + where + ")" : "tắt");
-    $("btnDraft").classList.toggle("primary", draftOn);
+    $("btnDraft").innerHTML = '<i class="ti ti-clock-down" aria-hidden="true"></i> Auto Save';
+    $("btnDraft").title = draftOn ? "Auto Save đang bật (" + where + "). Bấm để tắt." : "Chọn file lưu tạm; sau đó tự lưu mỗi khi có thay đổi";
+    $("btnDraft").classList.toggle("on", draftOn);
   }
   async function writeDraft(){
     if (!draftOn || !state.data) return;
@@ -2090,7 +2093,7 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
       if (draftHandle) await writeHandle(draftHandle, text);
       else localStorage.setItem(DRAFT_KEY, JSON.stringify({t:Date.now(), json:text}));
       $("fileMeta").title = "Lưu tạm lúc " + new Date().toLocaleTimeString();
-    } catch(err){ draftOn = false; setDraftLabel(); toast("Lưu tạm lỗi, đã tắt: " + (err && err.message ? err.message : "")); }
+    } catch(err){ draftOn = false; setDraftLabel(); toast("Auto Save lỗi, đã tắt: " + (err && err.message ? err.message : "")); }
   }
   $("btnDraft").onclick = async function(){
     if (!needData()) return;
@@ -2105,7 +2108,7 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
     }
     draftOn = true; setDraftLabel();
     await writeDraft();
-    toast(draftHandle ? "Lưu tạm bật: " + draftHandle.name : "Không ghi được file trên máy, bản tạm sẽ lưu trong trình duyệt.");
+    toast(draftHandle ? "Auto Save bật: " + draftHandle.name : "Không ghi được file trên máy, bản tạm sẽ lưu trong trình duyệt.");
   };
   setInterval(function(){
     if (!draftOn || !state.data) return;
