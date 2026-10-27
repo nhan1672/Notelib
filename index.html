@@ -167,7 +167,7 @@ label{font-size:12px;color:var(--text-2);display:block;margin-bottom:4px}
 .preview.live{cursor:text;min-height:110px}
 .preview.live:focus-within{outline:2px solid var(--accent);outline-offset:-1px}
 .preview-text[contenteditable]{outline:none;min-width:40px;min-height:1.7em}
-.preview-text[contenteditable]:empty::before{content:"(trống) - bấm vào đây để gõ note";color:var(--text-mute);font-family:var(--sans,inherit)}
+.preview-text[contenteditable]:empty::before{content:"(trống) - bấm nút cây bút để chỉnh sửa note";color:var(--text-mute);font-family:var(--sans,inherit)}
 .preview{border:1px dashed var(--border-strong);border-radius:var(--radius);padding:12px;background:var(--surface-2);font-size:13px;line-height:1.7;white-space:pre-wrap;min-height:90px;display:flex;flex-direction:column;justify-content:center;overflow:hidden}.preview-text{width:100%;white-space:pre-wrap;font-family:'ArchitxtPreview',var(--mono)}
 .preview sup{font-size:.7em}
 /* Thuộc tính hiển thị theo tên Text Note Type: blk = chữ đen, OPQ = nền trắng sau chữ (opaque), Red = chữ đỏ, Border = viền quanh đoạn chữ. Chỉ áp dụng cho type TextNote. */
@@ -180,6 +180,12 @@ label{font-size:12px;color:var(--text-2);display:block;margin-bottom:4px}
 .hint{font-size:11px;color:var(--text-mute);margin-top:6px}
 .field-import-row{display:flex;gap:6px;margin-bottom:8px}
 .field-import-row select{flex:1}
+.import-desc{margin:-4px 0 8px;white-space:normal;word-break:break-word}
+.preview-wrap{position:relative}
+.preview-wrap .preview{padding-right:44px}
+.preview-wrap .edit-btn{position:absolute;top:6px;right:6px;z-index:2;background:var(--surface)}
+.edit-btn.active{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.preview.editing{border-style:solid;border-color:var(--accent)}
 .import-btn{width:30px;height:28px;min-width:30px!important;padding:2px!important;display:inline-flex;align-items:center;justify-content:center}
 .import-icon{width:16px;height:16px;display:block}
 .raw-json{width:100%;font-family:var(--mono);font-size:11px;min-height:160px;background:var(--surface-2);color:var(--text-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;resize:vertical}
@@ -246,6 +252,8 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
   // Thứ tự hiển thị của field điều kiện: theo alphabet (không phân biệt hoa thường)
   var FIELD_LABELS = {};
   function fieldLabel(key){ if (!FIELD_LABELS.__built){ FIELD_DEFS.forEach(function(f){ FIELD_LABELS[f.key]=f.label; }); FIELD_LABELS.__built=true; } return FIELD_LABELS[key] || key; }
+  // Tên gọn (bỏ phần chú thích trong ngoặc) để hiển thị trong dropdown
+  function fieldName(key){ return fieldLabel(key).replace(/\s*\([^)]*\)\s*$/, ""); }
   function byLabel(a,b){ return a.toLowerCase().localeCompare(b.toLowerCase(), "en", {numeric:true}); }
   function sortedFieldDefs(){
     return FIELD_DEFS.slice().sort(function(a,b){
@@ -895,36 +903,89 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
       IMPORT_FIELDS.slice().sort(function(a,b){ return byLabel(fieldLabel(a.key), fieldLabel(b.key)); }).forEach(function(f){
         var o = document.createElement("option");
         o.value = f.key;
-        o.textContent = fieldLabel(f.key) + (f.note ? " — " + f.note : "");
+        o.textContent = fieldName(f.key);
         importSelect.appendChild(o);
       });
+      var importDesc = document.createElement("div");
+      importDesc.className = "field-note import-desc";
+      function updateImportDesc(){
+        var f = IMPORT_FIELDS.filter(function(x){ return x.key === importSelect.value; })[0];
+        var parts = [];
+        var hint = (fieldLabel(importSelect.value).match(/\(([^)]*)\)\s*$/) || [])[1];
+        if (hint) parts.push(hint);
+        if (f && f.note) parts.push(f.note);
+        importDesc.textContent = parts.length ? "{" + importSelect.value + "}: " + parts.join(" · ") : "{" + importSelect.value + "}";
+      }
+      importSelect.onchange = updateImportDesc;
+      updateImportDesc();
       var importBtn = document.createElement("button");
       importBtn.type = "button";
       importBtn.className = "ghost import-btn";
       importBtn.title = "Chèn field vào vị trí con trỏ trong note";
       importBtn.setAttribute("aria-label", "Chèn field vào vị trí con trỏ trong note");
       importBtn.innerHTML = '<svg class="import-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" aria-hidden="true"><path fill="currentColor" d="M480-240 240-480l56-56 144 144v-368h80v368l144-144 56 56-240 240Z"/></svg>';
+      var editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "ghost import-btn edit-btn";
+      editBtn.title = "Bấm để bắt đầu chỉnh sửa text note (bấm lần nữa hoặc click ra ngoài để kết thúc)";
+      editBtn.setAttribute("aria-label", "Chỉnh sửa text note");
+      editBtn.innerHTML = '<svg class="import-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" aria-hidden="true"><path fill="currentColor" d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z"/></svg>';
       importRow.appendChild(importSelect);
       importRow.appendChild(importBtn);
       tbWrap.appendChild(importRow);
+      tbWrap.appendChild(importDesc);
 
       tbWrap.appendChild(toolbar);
 
       var editor = document.createElement("div");
-      editor.className = "preview-text"; editor.contentEditable = "true"; editor.spellcheck = false; editor.id = "richEditor";
+      editor.className = "preview-text"; editor.contentEditable = "false"; editor.spellcheck = false; editor.id = "richEditor";
       editor.innerHTML = segmentsToHtml(parseMarkup(rule.textContent||""));
       // Khung xem trước = khung chỉnh sửa: gõ trực tiếp trong khung này, hiển thị theo căn lề / Text Note Type.
       var preview = document.createElement("div"); preview.className = "preview live"; preview.id = "notePreview";
       preview.appendChild(editor);
       preview.addEventListener("mousedown", function(e){
-        if (e.target === preview){ e.preventDefault(); editor.focus(); var r=document.createRange(); r.selectNodeContents(editor); r.collapse(false); var sl=window.getSelection(); sl.removeAllRanges(); sl.addRange(r); }
+        if (editing && e.target === preview){ e.preventDefault(); editor.focus(); var r=document.createRange(); r.selectNodeContents(editor); r.collapse(false); var sl=window.getSelection(); sl.removeAllRanges(); sl.addRange(r); }
       });
-      tbWrap.appendChild(preview);
+      var previewWrap = document.createElement("div"); previewWrap.className = "preview-wrap";
+      previewWrap.appendChild(preview);
+      previewWrap.appendChild(editBtn);   // nút cây bút nằm ngay góc trên phải khung chỉnh sửa
+      tbWrap.appendChild(previewWrap);
 
       var hint = document.createElement("div"); hint.className="hint";
-      hint.textContent = "Gõ trực tiếp trong khung xem trước (hiển thị gần đúng như Revit). Bôi đen chữ rồi bấm nút định dạng. Dùng {TenField} để chèn giá trị động, vd {BalRating}. Tab ở đầu dòng = thụt lề.";
+      hint.textContent = "Bấm nút cây bút để bắt đầu chỉnh sửa, rồi gõ trực tiếp trong khung xem trước (hiển thị gần đúng như Revit). Bôi đen chữ rồi bấm nút định dạng. Dùng {TenField} để chèn giá trị động, vd {BalRating}. Tab ở đầu dòng = thụt lề.";
       tbWrap.appendChild(hint);
       card.appendChild(tbWrap);
+
+      // ---- Chế độ chỉnh sửa: mặc định chỉ xem; bấm nút cây bút mới được gõ ----
+      var editing = false;
+      function setEditing(on){
+        editing = !!on;
+        editor.contentEditable = editing ? "true" : "false";
+        editBtn.classList.toggle("active", editing);
+        preview.classList.toggle("editing", editing);
+        if (editing){
+          editor.focus();
+          var sel0 = window.getSelection();
+          var r0 = document.createRange();
+          r0.selectNodeContents(editor); r0.collapse(false);   // đặt con trỏ ở cuối text
+          sel0.removeAllRanges(); sel0.addRange(r0);
+        } else {
+          var s1 = window.getSelection();
+          if (s1.rangeCount && editor.contains(s1.anchorNode)) s1.removeAllRanges();
+          if (document.activeElement === editor) editor.blur();
+        }
+      }
+      editBtn.onmousedown = function(e){ e.preventDefault(); };
+      editBtn.onclick = function(){ setEditing(!editing); };
+      function needEdit(){ if (editing) return false; toast("Bấm nút cây bút để bắt đầu chỉnh sửa text note"); return true; }
+      // Click ra ngoài vùng soạn thảo (toolbar + dropdown + khung text) hoặc nhấn Esc => kết thúc chỉnh sửa
+      function onDocDown(e){
+        if (!document.body.contains(editor)){ document.removeEventListener("mousedown", onDocDown, true); document.removeEventListener("keydown", onDocKey, true); return; }
+        if (editing && !tbWrap.contains(e.target)) setEditing(false);
+      }
+      function onDocKey(e){ if (editing && e.key === "Escape" && tbWrap.contains(document.activeElement)) setEditing(false); }
+      document.addEventListener("mousedown", onDocDown, true);
+      document.addEventListener("keydown", onDocKey, true);
 
       // Nhớ vị trí con trỏ trong editor để chèn field đúng chỗ dù đã click ra ngoài (vào dropdown/nút import).
       var savedEditorRange = null;
@@ -941,6 +1002,7 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
       importBtn.onclick = function(){
         var key = importSelect.value;
         if (!key) return;
+        if (needEdit()) return;
         editor.focus();
         var sel = window.getSelection();
         sel.removeAllRanges();
@@ -1054,6 +1116,7 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
         btn.onmousedown = function(e){ e.preventDefault(); };
         btn.onclick = function(){
           var cmd = btn.getAttribute("data-cmd");
+          if (needEdit()) return;
           if (cmd==="case"){ toggleCase(); return; }
           editor.focus();
           if (cmd==="newline"){ document.execCommand("insertHTML", false, "<br>"); }
@@ -1259,6 +1322,13 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
 
         var valSlot = document.createElement("div");
         buildValueInput(); valSlot.appendChild(valInput);
+        // Field yes/no (hoặc toán tử IsTrue/IsFalse) không cần giá trị -> ẩn ô nhập (giữ chỗ để cột không lệch)
+        function updateValVisibility(){
+          var hide = isBoolField() || BOOL_OPS.indexOf(opSel.value) !== -1;
+          valSlot.style.visibility = hide ? "hidden" : "";
+          valSlot.style.pointerEvents = hide ? "none" : "";
+        }
+        updateValVisibility();
 
         fieldSel.onchange = function(){
           snapshotNow();
@@ -1266,10 +1336,12 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
           customInput.style.display = fieldSel.value==="__custom__" ? "block" : "none";
           buildOps();
           valSlot.innerHTML = ""; buildValueInput(); valSlot.appendChild(valInput);
+          updateValVisibility();
+          if (valSlot.style.visibility === "hidden") delete cond.value;
           refreshRawJson();
         };
         customInput.oninput = function(){ snapshotDebounced(); cond.field = customInput.value; refreshRawJson(); };
-        opSel.onchange = function(){ snapshotNow(); cond.operator = opSel.value; var dis = BOOL_OPS.indexOf(opSel.value)!==-1; if (valInput._disable) valInput._disable(dis); else valInput.disabled = dis; refreshRawJson(); };
+        opSel.onchange = function(){ snapshotNow(); cond.operator = opSel.value; var dis = BOOL_OPS.indexOf(opSel.value)!==-1; if (valInput._disable) valInput._disable(dis); else valInput.disabled = dis; updateValVisibility(); if (valSlot.style.visibility === "hidden") delete cond.value; refreshRawJson(); };
 
         var fieldSlot = document.createElement("div");
         fieldSlot.appendChild(fieldSel); fieldSlot.appendChild(customInput);
