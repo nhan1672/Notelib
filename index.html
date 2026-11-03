@@ -216,6 +216,8 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
     <span style="width:1px;height:20px;background:var(--border-strong);margin:0 2px"></span>
     <button id="btnUndo" class="ghost" title="Hoàn tác (Ctrl+Z)" disabled><i class="ti ti-arrow-back-up" aria-hidden="true"></i></button>
     <button id="btnRedo" class="ghost" title="Làm lại (Ctrl+Y)" disabled><i class="ti ti-arrow-forward-up" aria-hidden="true"></i></button>
+    <span style="width:1px;height:20px;background:var(--border-strong);margin:0 2px"></span>
+    <button id="btnInfo" class="ghost" title="Thông tin: phiên bản, nhà phát triển, email"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" style="vertical-align:-3px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="11" x2="12" y2="17"/><circle cx="12" cy="7.3" r=".7" fill="currentColor"/></svg> Info</button>
   </div>
   <div class="body">
     <div class="sidebar">
@@ -242,6 +244,9 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css"></script>
 <script>
+  // Thông tin hiển thị ở nút Info. Đổi phiên bản / tên / email tại đây (và trong Models/AddinInfo.cs của add-in).
+  var APP_INFO = { name: "Rule editor", version: "2026.01", developer: "Norman", email: "ntnhan1672@gmail.com" };
+
 (function(){
   "use strict";
 
@@ -298,6 +303,8 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
     {key:"RetainingWallEnabled", label:"Retaining Wall", kind:"bool"},
     {key:"TimberSleeperEnabled", label:"Timber Sleeper", kind:"bool"},
     {key:"GarageEnabled", label:"Garage", kind:"bool"},
+    {key:"RollerDoorEnabled", label:"Roller Door", kind:"bool"},
+    {key:"PanelLiftDoorEnabled", label:"Panel Lift Door", kind:"bool"},
     {key:"PanelLiftDoorWidth", label:"Panel Lift Door Width (khi có Garage)", kind:"text"},
     {key:"PanelLiftDoorHeight", label:"Panel Lift Door Height (khi có Garage)", kind:"text"},
     {key:"TimberFloorEnabled", label:"Timber Floor", kind:"bool"},
@@ -714,6 +721,64 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
       posWrap.appendChild(fieldRow("Y (mm)", yIn));
       card.appendChild(posWrap);
 
+      // Anchored: note bám theo đối tượng trên sheet (title block / schedule / drafting view / legend).
+      var anchorWrap = document.createElement("div"); anchorWrap.id = "anchorWrap";
+      anchorWrap.style.display = mode==="Anchored" ? "block" : "none";
+      function ensureAnchor(){
+        if (!rule.anchor) rule.anchor = {target:"TitleBlock", xRef:"Left", yRef:"Bottom", offsetXMm:0, offsetYMm:0, alignTextToAnchor:true};
+        return rule.anchor;
+      }
+      function anchorSelect(options, current, onChange){
+        var sel = document.createElement("select");
+        options.forEach(function(o){
+          var op = document.createElement("option"); op.value = o[0]; op.textContent = o[1];
+          if (o[0] === current) op.selected = true; sel.appendChild(op);
+        });
+        sel.onchange = function(){ snapshotNow(); onChange(sel.value); refreshRawJson(); };
+        return sel;
+      }
+      var anc = mode==="Anchored" ? ensureAnchor() : (rule.anchor || {});
+      var aRow1 = document.createElement("div"); aRow1.className = "row";
+      var aTargetSel = anchorSelect([["TitleBlock","Title block"],["Schedule","Schedule"],["DraftingView","Drafting View"],["Legend","Legend"]],
+        anc.target||"TitleBlock", function(v){ ensureAnchor().target = v; syncAnchorView(); });
+      var aViewIn = document.createElement("input"); aViewIn.type = "text"; aViewIn.placeholder = "Tên view làm điểm bám";
+      aViewIn.value = anc.viewName || "";
+      aViewIn.oninput = function(e){ snapshotDebounced(); ensureAnchor().viewName = e.target.value; refreshRawJson(); };
+      var aViewField = fieldRow("Tên view (Schedule / Drafting View / Legend)", aViewIn);
+      function syncAnchorView(){
+        var a = rule.anchor || anc;
+        var isTb = (a.target||"TitleBlock") === "TitleBlock";
+        aViewField.style.display = isTb ? "none" : "";
+        if (isTb && rule.anchor){ delete rule.anchor.viewName; aViewIn.value = ""; }
+      }
+      aRow1.appendChild(fieldRow("Bám theo đối tượng", aTargetSel));
+      aRow1.appendChild(aViewField);
+      anchorWrap.appendChild(aRow1);
+
+      var aRow2 = document.createElement("div"); aRow2.className = "row";
+      aRow2.appendChild(fieldRow("Điểm tham chiếu ngang", anchorSelect([["Left","Trái"],["Center","Giữa"],["Right","Phải"]],
+        anc.xRef||"Left", function(v){ ensureAnchor().xRef = v; })));
+      aRow2.appendChild(fieldRow("Điểm tham chiếu dọc", anchorSelect([["Top","Trên"],["Middle","Giữa"],["Bottom","Dưới"]],
+        anc.yRef||"Bottom", function(v){ ensureAnchor().yRef = v; })));
+      var aXIn = document.createElement("input"); aXIn.type = "number"; aXIn.step = "any"; aXIn.value = (anc.offsetXMm===undefined?0:anc.offsetXMm);
+      var aYIn = document.createElement("input"); aYIn.type = "number"; aYIn.step = "any"; aYIn.value = (anc.offsetYMm===undefined?0:anc.offsetYMm);
+      aXIn.oninput = function(e){ snapshotDebounced(); ensureAnchor().offsetXMm = e.target.value===""?0:Number(e.target.value); refreshRawJson(); };
+      aYIn.oninput = function(e){ snapshotDebounced(); ensureAnchor().offsetYMm = e.target.value===""?0:Number(e.target.value); refreshRawJson(); };
+      aRow2.appendChild(fieldRow("Lệch X (mm, + sang phải)", aXIn));
+      aRow2.appendChild(fieldRow("Lệch Y (mm, + lên trên)", aYIn));
+      anchorWrap.appendChild(aRow2);
+
+      var aRow3 = document.createElement("div"); aRow3.className = "row"; aRow3.style.alignItems = "center";
+      var aAlignLabel = document.createElement("label"); aAlignLabel.style.display = "flex"; aAlignLabel.style.alignItems = "center"; aAlignLabel.style.gap = "6px"; aAlignLabel.style.margin = "0";
+      var aAlignCb = document.createElement("input"); aAlignCb.type = "checkbox"; aAlignCb.checked = anc.alignTextToAnchor !== false;
+      aAlignCb.onchange = function(){ snapshotNow(); ensureAnchor().alignTextToAnchor = aAlignCb.checked; refreshRawJson(); };
+      aAlignLabel.appendChild(aAlignCb);
+      aAlignLabel.appendChild(document.createTextNode("Căn chữ theo điểm tham chiếu (trái → căn trái, giữa → căn giữa, phải → căn phải)"));
+      aRow3.appendChild(aAlignLabel);
+      anchorWrap.appendChild(aRow3);
+      syncAnchorView();
+      card.appendChild(anchorWrap);
+
       // Chiều rộng text note (tùy chọn): mặc định KHÔNG dùng. Bật = add-in đặt width (mm trên giấy) cho TextNote.
       var widthWrap = document.createElement("div"); widthWrap.className = "row";
       widthWrap.style.alignItems = "center"; widthWrap.style.gap = "12px";
@@ -758,7 +823,8 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
       // Icon Flow (auto-rải) / Fixed (toạ độ x-y), thay cho radio "Vị trí đặt".
       var placementIcons = {
         Flow: '<svg class="material-align-icon" viewBox="0 0 100 100" aria-hidden="true"><rect x="10" y="31" width="38" height="6" rx="3" fill="currentColor"/><rect x="10" y="47" width="38" height="6" rx="3" fill="currentColor"/><rect x="10" y="63" width="38" height="6" rx="3" fill="currentColor"/><path d="M 52 50 H 82" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M 70 38 L 82 50 L 70 62" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-        Fixed: '<svg class="material-align-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M 16 84 V 18" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M 8 28 L 16 16 L 24 28" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M 16 84 H 82" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M 72 76 L 84 84 L 72 92" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><rect x="32" y="28" width="44" height="6" rx="3" fill="currentColor"/><rect x="32" y="47" width="44" height="6" rx="3" fill="currentColor"/><rect x="32" y="66" width="44" height="6" rx="3" fill="currentColor"/></svg>'
+        Fixed: '<svg class="material-align-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="M 16 84 V 18" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M 8 28 L 16 16 L 24 28" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M 16 84 H 82" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M 72 76 L 84 84 L 72 92" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><rect x="32" y="28" width="44" height="6" rx="3" fill="currentColor"/><rect x="32" y="47" width="44" height="6" rx="3" fill="currentColor"/><rect x="32" y="66" width="44" height="6" rx="3" fill="currentColor"/></svg>',
+        Anchored: '<svg class="material-align-icon" viewBox="0 0 100 100" aria-hidden="true"><rect x="12" y="12" width="76" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="5"/><circle cx="50" cy="46" r="6" fill="currentColor"/><path d="M 50 52 V 64" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><rect x="26" y="68" width="48" height="6" rx="3" fill="currentColor"/><rect x="34" y="82" width="32" height="6" rx="3" fill="currentColor"/></svg>'
       };
 
       var leaderIcons = {
@@ -843,11 +909,15 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
       }
       fmtTop.appendChild(makeAlignButton("Flow (tự rải)","Flow",mode,placementIcons.Flow,function(){
         snapshotNow(); rule.placementMode="Flow"; mode="Flow"; setPlacementActive(this);
-        posWrap.style.display="none"; refreshRawJson();
+        posWrap.style.display="none"; anchorWrap.style.display="none"; refreshRawJson();
       },"placement-btn"));
       fmtTop.appendChild(makeAlignButton("Fixed (toạ độ cố định)","Fixed",mode,placementIcons.Fixed,function(){
         snapshotNow(); rule.placementMode="Fixed"; mode="Fixed"; setPlacementActive(this);
-        posWrap.style.display="flex"; refreshRawJson();
+        posWrap.style.display="flex"; anchorWrap.style.display="none"; refreshRawJson();
+      },"placement-btn"));
+      fmtTop.appendChild(makeAlignButton("Anchored (bám theo đối tượng: title block / schedule / view)","Anchored",mode,placementIcons.Anchored,function(){
+        snapshotNow(); rule.placementMode="Anchored"; mode="Anchored"; setPlacementActive(this);
+        ensureAnchor(); posWrap.style.display="none"; anchorWrap.style.display="block"; refreshRawJson();
       },"placement-btn"));
 
       addCmd(fmtTop,"tab","Thụt lề (đầu dòng)","⭢");
@@ -2150,6 +2220,32 @@ details summary{cursor:pointer;font-size:12px;color:var(--text-2);margin-bottom:
   document.addEventListener("keydown", function(e){
     if ((e.ctrlKey||e.metaKey) && (e.key==="s"||e.key==="S")){ e.preventDefault(); $("btnSave").click(); }
   });
+
+  // ---- Info ----
+  $("btnInfo").onclick = function(){
+    var ov = mk("div", "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center");
+    var box = mk("div", "background:var(--surface);color:var(--text);border:1px solid var(--border-strong);border-radius:10px;padding:20px 22px;width:380px;max-width:92vw;display:flex;flex-direction:column;gap:12px");
+    box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Thông tin");
+    box.appendChild(mk("h3", "margin:0", APP_INFO.name + " - Sheet Note Automation"));
+    function row(label, valueNode){
+      var r = mk("div", "display:flex;gap:10px;align-items:baseline");
+      r.appendChild(mk("div", "width:130px;flex:none;color:var(--text-mute)", label));
+      r.appendChild(valueNode);
+      return r;
+    }
+    box.appendChild(row("Phiên bản (Build)", mk("div", "font-weight:600", APP_INFO.version)));
+    box.appendChild(row("Nhà phát triển", mk("div", "", APP_INFO.developer)));
+    var mail = mk("a", "color:var(--accent)", APP_INFO.email); mail.href = "mailto:" + APP_INFO.email;
+    box.appendChild(row("Email", mail));
+    var btnRow = mk("div", "display:flex;justify-content:flex-end;margin-top:4px");
+    var bx = mk("button", "", "Đóng"); bx.className = "primary";
+    function close(){ ov.remove(); document.removeEventListener("keydown", onKey); }
+    function onKey(e){ if (e.key === "Escape") close(); }
+    bx.onclick = close; ov.onclick = function(e){ if (e.target === ov) close(); };
+    document.addEventListener("keydown", onKey);
+    btnRow.appendChild(bx); box.appendChild(btnRow); ov.appendChild(box);
+    document.body.appendChild(ov); bx.focus();
+  };
 
   // ---- Lưu tạm ----
   function setDraftLabel(){
